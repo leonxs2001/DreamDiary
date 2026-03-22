@@ -1,0 +1,15 @@
+target/
+out/
+.idea/
+*.iml
+*.class
+*.log
+hs_err_pid*
+
+.env
+.DS_Store
+
+data/
+*.db
+*.db-shm
+*.db-wal

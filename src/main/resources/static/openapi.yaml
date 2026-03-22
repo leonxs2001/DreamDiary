@@ -1,0 +1,326 @@
+openapi: 3.0.3
+info:
+  title: Dream Diary API
+  version: 1.0.0
+  description: API for creating and managing dream entries.
+servers:
+  - url: https://your-domain.example.com
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://your-domain.example.com/oauth2/authorize
+          tokenUrl: https://your-domain.example.com/oauth2/token
+          scopes:
+            dream.read: Read dream entries
+            dream.write: Create, update, and delete dream entries
+            openid: OpenID Connect scope
+            profile: Basic profile scope
+  schemas:
+    CreateDreamEntryRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          example: Ich bin durch einen hellen Wald geflogen.
+    UpdateDreamEntryTextRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          example: Danach wurde der Himmel golden.
+    DreamEntryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 12
+        text:
+          type: string
+          example: Ich stand am Meer und sah zwei Monde.
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-03-22T07:45:30Z
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: 2026-03-22T08:01:05Z
+    PagedDreamEntryResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/DreamEntryResponse'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          example: 42
+        totalPages:
+          type: integer
+          example: 3
+        last:
+          type: boolean
+          example: false
+    ApiError:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: 2026-03-22T10:15:30Z
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        message:
+          type: string
+          example: Query parameter 'day' cannot be combined with 'start' or 'end'.
+        path:
+          type: string
+          example: /api/dream-entries
+        validationErrors:
+          type: object
+          additionalProperties:
+            type: string
+security:
+  - oauth2:
+      - dream.read
+paths:
+  /api/dream-entries:
+    post:
+      operationId: createDreamEntry
+      summary: Create a dream entry
+      security:
+        - oauth2:
+            - dream.write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDreamEntryRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DreamEntryResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    get:
+      operationId: searchDreamEntries
+      summary: Search dream entries
+      description: If `day` is present, `start` and `end` are rejected with 400.
+      security:
+        - oauth2:
+            - dream.read
+      parameters:
+        - in: query
+          name: day
+          required: false
+          schema:
+            type: string
+            format: date
+          example: 2026-03-22
+        - in: query
+          name: start
+          required: false
+          schema:
+            type: string
+            format: date-time
+          example: 2026-03-22T00:00:00Z
+        - in: query
+          name: end
+          required: false
+          schema:
+            type: string
+            format: date-time
+          example: 2026-03-23T00:00:00Z
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          example: meer
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - in: query
+          name: size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+        - in: query
+          name: sort
+          required: false
+          schema:
+            type: string
+            default: createdAt,desc
+      responses:
+        '200':
+          description: Search result page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedDreamEntryResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/dream-entries/{id}:
+    get:
+      operationId: getDreamEntryById
+      summary: Get one dream entry
+      security:
+        - oauth2:
+            - dream.read
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Dream entry found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DreamEntryResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Dream entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      operationId: deleteDreamEntry
+      summary: Delete a dream entry
+      security:
+        - oauth2:
+            - dream.write
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Dream entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/dream-entries/{id}/text:
+    patch:
+      operationId: updateDreamEntryText
+      summary: Update only the text field of a dream entry
+      security:
+        - oauth2:
+            - dream.write
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDreamEntryTextRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DreamEntryResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Dream entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
