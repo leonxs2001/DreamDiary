@@ -1,19 +1,14 @@
 # dream-diary
 
-REST-Anwendung für ein Traumtagebuch auf Basis von Spring Boot 3, Java 21 und Maven.  
-Die Anwendung enthält:
-
-- OAuth2 Authorization Server (inkl. Login-Seite via Spring Security Form Login)
-- geschützte Resource-API für Traumeinträge
-- SQLite-Persistenz
-- OpenAPI-Dokumentation für OpenAI GPT Actions
+REST-Anwendung für ein Traumtagebuch mit Spring Boot 3, Java 21, Maven und SQLite.  
+Die API ist über einen statischen Bearer-API-Key abgesichert, der aus `.env` geladen wird.
 
 ## Architektur (kurz)
 
-- `security`: OAuth2 Authorization Server + JWT Resource Server in derselben App
-- `dreamentry`: Controller, Service, Repository, Entity, DTOs
-- `common`: einheitliches Fehlerformat und globale Fehlerbehandlung
-- `config`: OpenAPI-Konfiguration und Initialisierung des SQLite-Verzeichnisses
+- `security`: API-Key-basierte Authentifizierung für `/api/**`
+- `dreamentry`: Controller, Service, Repository, Entity und DTOs
+- `common`: globales Fehlerformat und Exception-Handling
+- `config`: SQLite-Verzeichnis-Initialisierung und OpenAPI-Konfiguration
 
 ## Voraussetzungen
 
@@ -22,7 +17,7 @@ Die Anwendung enthält:
 
 ## Lokaler Start
 
-1. `.env` prüfen/anpassen (liegt bereits im Projekt).
+1. `.env` prüfen/anpassen.
 2. Build und Tests:
    ```bash
    mvn clean test
@@ -32,99 +27,91 @@ Die Anwendung enthält:
    mvn spring-boot:run
    ```
 
-Die App läuft standardmäßig unter `http://localhost:8080`.
+Die App läuft auf `http://localhost:8080`.
 
 ## ENV-Variablen
 
-Die Anwendung lädt `.env` automatisch über `spring.config.import=optional:file:.env[.properties]`.
+`.env` wird automatisch geladen über:
 
-Pflicht-/Kernvariablen:
+```properties
+spring.config.import=optional:file:.env[.properties]
+```
+
+Pflichtvariablen:
 
 - `SQLITE_DB_PATH`  
   Beispiel: `./data/dream-diary.db`
-- `DREAM_DIARY_USERS`  
-  Format: `username:password,username2:password2`  
-  Beispiel: `alice:secret123,bob:topsecret456`
-- `OAUTH_CLIENT_ID`
-- `OAUTH_CLIENT_SECRET`
-- `OAUTH_REDIRECT_URI`
-- `OAUTH_SCOPES` (optional, Default: `openid,profile,dream.read,dream.write`)
-- `OAUTH_ISSUER` (Default: `http://localhost:8080`)
+- `DREAM_DIARY_API_KEY`  
+  Beispiel: `super-long-random-secret-api-key`
 
-OpenAPI-Helfer:
+Optional:
 
-- `OPENAPI_SERVER_URL`
-- `OPENAPI_AUTHORIZATION_URL`
-- `OPENAPI_TOKEN_URL`
+- `OPENAPI_SERVER_URL`  
+  Beispiel lokal: `http://localhost:8080`  
+  Beispiel Produktion: `https://your-domain.example.com`
 
 Hinweise:
 
-- Benutzer werden ausschließlich aus `DREAM_DIARY_USERS` geladen.
-- Ungültige Benutzerdefinitionen führen zu einem klaren Startup-Fehler (fail-fast).
-- Passwörter aus der ENV werden beim Laden mit BCrypt gehasht.
-- Das Verzeichnis für `SQLITE_DB_PATH` wird beim Start automatisch erzeugt.
+- `DREAM_DIARY_API_KEY` wird beim Start validiert (fail-fast bei leerem Wert).
+- Das Verzeichnis für `SQLITE_DB_PATH` wird beim Start automatisch erstellt.
 
-## OAuth2-Setup (für OpenAI GPT Actions)
+## Authentifizierung
 
-### Relevante Endpunkte
+Alle Endpunkte unter `/api/**` benötigen:
 
-- Authorization URL: `http://localhost:8080/oauth2/authorize`
-- Token URL: `http://localhost:8080/oauth2/token`
-- Login-Seite: `http://localhost:8080/login`
+```http
+Authorization: Bearer <DREAM_DIARY_API_KEY>
+```
 
-### Werte im GPT-Action-Editor
-
-- Auth type: `OAuth`
-- Client ID: Wert aus `OAUTH_CLIENT_ID`
-- Client Secret: Wert aus `OAUTH_CLIENT_SECRET`
-- Authorization URL: `https://<deine-domain>/oauth2/authorize`
-- Token URL: `https://<deine-domain>/oauth2/token`
-- Scope: z. B. `dream.read dream.write` (optional zusätzlich `openid profile`)
-- Redirect/Callback:
-  - Der im GPT-Editor angezeigte Callback muss exakt in `OAUTH_REDIRECT_URI` stehen.
-  - Beispiel: `https://chat.openai.com/aip/oauth/callback` (nur Beispiel, im Editor prüfen).
+`/actuator/health`, `/swagger-ui/**`, `/v3/api-docs/**` und `/openapi.yaml` sind öffentlich.
 
 ## OpenAPI für GPT Actions
 
-Optionen:
-
 - Laufende JSON-Spec: `http://localhost:8080/v3/api-docs`
-- Statische YAML-Spec (zur direkten URL-Nutzung): `http://localhost:8080/openapi.yaml`
-- Datei im Repo: `openapi.yaml`
+- Statische YAML-Spec: `http://localhost:8080/openapi.yaml`
+- Repo-Datei: `openapi.yaml`
 
-Im GPT-Editor kannst du entweder:
+### OpenAI GPT Action Setup (API Key)
 
-1. die `openapi.yaml` direkt einfügen, oder
-2. eine öffentlich erreichbare HTTPS-URL zur Spec hinterlegen.
+Im GPT-Action-Editor:
+
+- Authentication Type: `API Key`
+- API Key value: dein Wert aus `DREAM_DIARY_API_KEY`
+- API Key location: `Authorization` Header
+- Format: `Bearer <API_KEY>`
 
 ## API-Verhalten
 
-- Basis-Pfad: `/api/dream-entries`
+- Basis: `/api/dream-entries`
 - `createdAt` wird serverseitig gesetzt.
-- `updatedAt` wird beim Text-Update gesetzt.
-- Zeitstempel sind UTC / ISO-8601.
+- `updatedAt` wird bei PATCH gesetzt.
+- Zeitstempel sind UTC in ISO-8601.
 - Filterregel:
-  - `day` ist führend.
-  - Kombination von `day` mit `start` oder `end` gibt `400 Bad Request`.
+  - `day` darf nicht mit `start`/`end` kombiniert werden.
+  - Bei Kombination gibt die API `400 Bad Request`.
 
-## Beispiel-cURL (mit Access Token)
+## Beispiel-cURL
 
-`ACCESS_TOKEN` muss ein gültiger OAuth2-Access-Token mit passenden Scopes sein.
+PowerShell:
+
+```powershell
+$env:API_KEY="replace-with-your-api-key"
+```
 
 Create:
 
 ```bash
 curl -X POST "http://localhost:8080/api/dream-entries" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text":"Ich flog über eine Stadt aus Glas."}'
+  -d '{"text":"Ich flog ueber eine Stadt aus Glas."}'
 ```
 
 Patch Text:
 
 ```bash
 curl -X PATCH "http://localhost:8080/api/dream-entries/1/text" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"text":"Dann wurde der Himmel golden."}'
 ```
@@ -132,34 +119,33 @@ curl -X PATCH "http://localhost:8080/api/dream-entries/1/text" \
 Filter by day:
 
 ```bash
-curl "http://localhost:8080/api/dream-entries?day=2026-03-22&page=0&size=20&sort=createdAt,desc" \
-  -H "Authorization: Bearer $ACCESS_TOKEN"
+curl "http://localhost:8080/api/dream-entries?day=2026-03-23&page=0&size=20&sort=createdAt,desc" \
+  -H "Authorization: Bearer $API_KEY"
 ```
 
 Filter by timespan:
 
 ```bash
-curl "http://localhost:8080/api/dream-entries?start=2026-03-22T00:00:00Z&end=2026-03-23T00:00:00Z" \
-  -H "Authorization: Bearer $ACCESS_TOKEN"
+curl "http://localhost:8080/api/dream-entries?start=2026-03-23T00:00:00Z&end=2026-03-24T00:00:00Z" \
+  -H "Authorization: Bearer $API_KEY"
 ```
 
-Filter by text query:
+Filter by q:
 
 ```bash
 curl "http://localhost:8080/api/dream-entries?q=meer" \
-  -H "Authorization: Bearer $ACCESS_TOKEN"
+  -H "Authorization: Bearer $API_KEY"
 ```
 
-## Healthcheck
+Healthcheck:
 
-- `GET /actuator/health` ist ohne Authentifizierung erreichbar.
+```bash
+curl "http://localhost:8080/actuator/health"
+```
 
-## Deployment-Hinweise (GPT Actions)
+## Deployment-Hinweise
 
-- OpenAI GPT Actions benötigen öffentlich erreichbare HTTPS-Endpunkte.
+- Für GPT Actions muss die API öffentlich per HTTPS erreichbar sein.
 - Setze in Produktion:
-  - `OAUTH_ISSUER=https://<deine-domain>`
   - `OPENAPI_SERVER_URL=https://<deine-domain>`
-  - `OPENAPI_AUTHORIZATION_URL=https://<deine-domain>/oauth2/authorize`
-  - `OPENAPI_TOKEN_URL=https://<deine-domain>/oauth2/token`
-- Achte darauf, dass Reverse Proxy / Load Balancer korrekte `X-Forwarded-*` Header setzen.
+- Verwende einen starken, langen API-Key und rotiere ihn regelmäßig.

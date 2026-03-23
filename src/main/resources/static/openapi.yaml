@@ -7,17 +7,10 @@ servers:
   - url: https://your-domain.example.com
 components:
   securitySchemes:
-    oauth2:
-      type: oauth2
-      flows:
-        authorizationCode:
-          authorizationUrl: https://your-domain.example.com/oauth2/authorize
-          tokenUrl: https://your-domain.example.com/oauth2/token
-          scopes:
-            dream.read: Read dream entries
-            dream.write: Create, update, and delete dream entries
-            openid: OpenID Connect scope
-            profile: Basic profile scope
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
   schemas:
     CreateDreamEntryRequest:
       type: object
@@ -50,12 +43,12 @@ components:
         createdAt:
           type: string
           format: date-time
-          example: 2026-03-22T07:45:30Z
+          example: 2026-03-23T07:45:30Z
         updatedAt:
           type: string
           format: date-time
           nullable: true
-          example: 2026-03-22T08:01:05Z
+          example: 2026-03-23T08:01:05Z
     PagedDreamEntryResponse:
       type: object
       properties:
@@ -85,7 +78,7 @@ components:
         timestamp:
           type: string
           format: date-time
-          example: 2026-03-22T10:15:30Z
+          example: 2026-03-23T10:15:30Z
         status:
           type: integer
           example: 400
@@ -103,16 +96,14 @@ components:
           additionalProperties:
             type: string
 security:
-  - oauth2:
-      - dream.read
+  - bearerAuth: []
 paths:
   /api/dream-entries:
     post:
       operationId: createDreamEntry
       summary: Create a dream entry
       security:
-        - oauth2:
-            - dream.write
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -149,8 +140,7 @@ paths:
       summary: Search dream entries
       description: If `day` is present, `start` and `end` are rejected with 400.
       security:
-        - oauth2:
-            - dream.read
+        - bearerAuth: []
       parameters:
         - in: query
           name: day
@@ -158,21 +148,21 @@ paths:
           schema:
             type: string
             format: date
-          example: 2026-03-22
+          example: 2026-03-23
         - in: query
           name: start
           required: false
           schema:
             type: string
             format: date-time
-          example: 2026-03-22T00:00:00Z
+          example: 2026-03-23T00:00:00Z
         - in: query
           name: end
           required: false
           schema:
             type: string
             format: date-time
-          example: 2026-03-23T00:00:00Z
+          example: 2026-03-24T00:00:00Z
         - in: query
           name: q
           required: false
@@ -223,8 +213,7 @@ paths:
       operationId: getDreamEntryById
       summary: Get one dream entry
       security:
-        - oauth2:
-            - dream.read
+        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -255,8 +244,7 @@ paths:
       operationId: deleteDreamEntry
       summary: Delete a dream entry
       security:
-        - oauth2:
-            - dream.write
+        - bearerAuth: []
       parameters:
         - in: path
           name: id
@@ -284,8 +272,7 @@ paths:
       operationId: updateDreamEntryText
       summary: Update only the text field of a dream entry
       security:
-        - oauth2:
-            - dream.write
+        - bearerAuth: []
       parameters:
         - in: path
           name: id

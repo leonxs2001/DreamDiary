@@ -1,6 +1,5 @@
 package com.example.dreamdiary.security;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -18,12 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
         "SQLITE_DB_PATH=./target/test-data/security-test.db",
-        "DREAM_DIARY_USERS=tester:secret123",
-        "OAUTH_CLIENT_ID=test-client",
-        "OAUTH_CLIENT_SECRET=test-secret",
-        "OAUTH_REDIRECT_URI=https://example.com/callback",
-        "OAUTH_SCOPES=openid,profile,dream.read,dream.write",
-        "OAUTH_ISSUER=http://localhost:8080"
+        "DREAM_DIARY_API_KEY=test-api-key"
 })
 class SecurityIntegrationTest {
 
@@ -37,25 +30,32 @@ class SecurityIntegrationTest {
     }
 
     @Test
-    void apiShouldReturnUnauthorizedWithoutToken() throws Exception {
+    void apiShouldReturnUnauthorizedWithoutApiKey() throws Exception {
         mockMvc.perform(get("/api/dream-entries"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void readScopeShouldAllowGetAndBlockWrite() throws Exception {
+    void apiShouldReturnUnauthorizedWithWrongApiKey() throws Exception {
         mockMvc.perform(get("/api/dream-entries")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_dream.read"))))
+                        .header("Authorization", "Bearer wrong-key"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void apiShouldAllowAccessWithValidApiKey() throws Exception {
+        mockMvc.perform(get("/api/dream-entries")
+                        .header("Authorization", "Bearer test-api-key"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/dream-entries")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_dream.read")))
+                        .header("Authorization", "Bearer test-api-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "text": "Not allowed with read scope only"
+                                  "text": "Created with api key"
                                 }
                                 """))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isCreated());
     }
 }
