@@ -1,4 +1,4 @@
-# dream-diary
+# dream-diary for gpt
 
 REST-Anwendung für ein Traumtagebuch mit Spring Boot 3, Java 21, Maven und SQLite.  
 Die API ist über einen statischen Bearer-API-Key abgesichert, der aus `.env` geladen wird.
