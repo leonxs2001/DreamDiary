@@ -2,14 +2,17 @@ name: Build and Commit JAR
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Repo auschecken
+      - name: Repository auschecken
         uses: actions/checkout@v4
         with:
           persist-credentials: true
@@ -20,7 +23,7 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Build mit Maven
+      - name: Maven Build
         run: mvn clean package -DskipTests
 
       - name: JAR vorbereiten
@@ -28,13 +31,13 @@ jobs:
           mkdir -p build-output
           cp target/dream-diary-*.jar build-output/app.jar
 
-      - name: Commit & Push
+      - name: Commit und Push
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
           git add build-output/app.jar
 
-          git commit -m "Update JAR [skip ci]" || echo "No changes"
+          git commit -m "Update JAR [skip ci]" || echo "No changes to commit"
 
           git push
