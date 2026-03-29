@@ -21,6 +21,11 @@ components:
           type: string
           minLength: 1
           example: Ich bin durch einen hellen Wald geflogen.
+        dreamDate:
+          type: string
+          format: date
+          description: Optional dream date. If omitted, the API uses the current timestamp.
+          example: 2026-03-23
     UpdateDreamEntryTextRequest:
       type: object
       required:

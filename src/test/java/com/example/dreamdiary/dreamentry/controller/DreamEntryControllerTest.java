@@ -1,6 +1,7 @@
 package com.example.dreamdiary.dreamentry.controller;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -11,6 +12,7 @@ import com.example.dreamdiary.common.exception.GlobalExceptionHandler;
 import com.example.dreamdiary.dreamentry.dto.DreamEntryResponse;
 import com.example.dreamdiary.dreamentry.service.DreamEntryService;
 import java.time.Instant;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -32,10 +34,30 @@ class DreamEntryControllerTest {
     private DreamEntryService service;
 
     @Test
-    void createShouldReturnCreatedEntry() throws Exception {
-        Instant createdAt = Instant.parse("2026-03-22T09:00:00Z");
+    void createShouldReturnCreatedEntryWithProvidedDreamDate() throws Exception {
+        Instant createdAt = Instant.parse("2026-03-20T00:00:00Z");
         DreamEntryResponse response = new DreamEntryResponse(1L, "Dream text", createdAt, null);
-        when(service.create(eq("Dream text"))).thenReturn(response);
+        when(service.create(eq("Dream text"), eq(LocalDate.parse("2026-03-20")))).thenReturn(response);
+
+        mockMvc.perform(post("/api/dream-entries")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "text": "Dream text",
+                                  "dreamDate": "2026-03-20"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.text").value("Dream text"))
+                .andExpect(jsonPath("$.createdAt").value("2026-03-20T00:00:00Z"));
+    }
+
+    @Test
+    void createShouldReturnCreatedEntryWithNowWhenDreamDateMissing() throws Exception {
+        Instant createdAt = Instant.parse("2026-03-22T09:00:00Z");
+        DreamEntryResponse response = new DreamEntryResponse(2L, "Dream text", createdAt, null);
+        when(service.create(eq("Dream text"), isNull())).thenReturn(response);
 
         mockMvc.perform(post("/api/dream-entries")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -45,7 +67,7 @@ class DreamEntryControllerTest {
                                 }
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.id").value(2))
                 .andExpect(jsonPath("$.text").value("Dream text"))
                 .andExpect(jsonPath("$.createdAt").value("2026-03-22T09:00:00Z"));
     }

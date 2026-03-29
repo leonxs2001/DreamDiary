@@ -83,7 +83,9 @@ Im GPT-Action-Editor:
 ## API-Verhalten
 
 - Basis: `/api/dream-entries`
-- `createdAt` wird serverseitig gesetzt.
+- Beim Erstellen kann optional `dreamDate` (ISO-8601 Datum, `YYYY-MM-DD`) gesetzt werden.
+- Wenn `dreamDate` fehlt, wird `createdAt` auf den aktuellen Zeitpunkt (`now`, UTC) gesetzt.
+- Wenn `dreamDate` gesetzt ist, wird `createdAt` auf den Tagesstart in UTC gesetzt.
 - `updatedAt` wird bei PATCH gesetzt.
 - Zeitstempel sind UTC in ISO-8601.
 - Filterregel:
@@ -104,7 +106,7 @@ Create:
 curl -X POST "http://localhost:8080/api/dream-entries" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text":"Ich flog ueber eine Stadt aus Glas."}'
+  -d '{"text":"Ich flog ueber eine Stadt aus Glas.","dreamDate":"2026-03-23"}'
 ```
 
 Patch Text:

@@ -32,11 +32,11 @@ public class DreamEntryService {
     }
 
     @Transactional
-    public DreamEntryResponse create(String text) {
+    public DreamEntryResponse create(String text, LocalDate dreamDate) {
         ensureTextIsValid(text);
         DreamEntry entry = new DreamEntry();
         entry.setText(text);
-        entry.setCreatedAt(Instant.now());
+        entry.setCreatedAt(resolveCreatedAt(dreamDate));
         DreamEntry savedEntry = repository.save(entry);
         log.debug("Created dream entry with id={}", savedEntry.getId());
         return toResponse(savedEntry);
@@ -137,6 +137,13 @@ public class DreamEntryService {
         if (!StringUtils.hasText(text)) {
             throw new InvalidRequestException("text must not be blank.");
         }
+    }
+
+    private Instant resolveCreatedAt(LocalDate dreamDate) {
+        if (dreamDate == null) {
+            return Instant.now();
+        }
+        return dreamDate.atStartOfDay().toInstant(ZoneOffset.UTC);
     }
 
     private DreamEntryResponse toResponse(DreamEntry entity) {

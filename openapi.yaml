@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: API for creating and managing dream entries.
 servers:
-  - url: https://nonceremoniously-neighbourless-douglas.ngrok-free.dev
+  - url: https://dream.leon-schoenberg.de
 components:
   securitySchemes:
     bearerAuth:
@@ -21,6 +21,11 @@ components:
           type: string
           minLength: 1
           example: Ich bin durch einen hellen Wald geflogen.
+        dreamDate:
+          type: string
+          format: date
+          description: Optional dream date. If omitted, the API uses the current timestamp.
+          example: 2026-03-23
     UpdateDreamEntryTextRequest:
       type: object
       required:

@@ -57,7 +57,7 @@ public class DreamEntryController {
             }
     )
     public DreamEntryResponse create(@Valid @RequestBody CreateDreamEntryRequest request) {
-        return service.create(request.text());
+        return service.create(request.text(), request.dreamDate());
     }
 
     @PatchMapping("/{id}/text")

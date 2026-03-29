@@ -30,19 +30,36 @@ class DreamEntryServiceTest {
     private DreamEntryService service;
 
     @Test
-    void createShouldPersistEntryWithCreatedAt() {
+    void createShouldPersistEntryWithNowWhenDreamDateMissing() {
         when(repository.save(any(DreamEntry.class))).thenAnswer(invocation -> {
             DreamEntry saved = invocation.getArgument(0);
             saved.setId(1L);
             return saved;
         });
 
-        DreamEntryResponse response = service.create("I was flying over mountains.");
+        DreamEntryResponse response = service.create("I was flying over mountains.", null);
 
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.createdAt()).isNotNull();
         assertThat(response.updatedAt()).isNull();
         assertThat(response.text()).isEqualTo("I was flying over mountains.");
+        verify(repository).save(any(DreamEntry.class));
+    }
+
+    @Test
+    void createShouldUseProvidedDreamDateStartOfDayUtc() {
+        when(repository.save(any(DreamEntry.class))).thenAnswer(invocation -> {
+            DreamEntry saved = invocation.getArgument(0);
+            saved.setId(2L);
+            return saved;
+        });
+
+        DreamEntryResponse response = service.create("I met a white fox.", LocalDate.parse("2026-03-18"));
+
+        assertThat(response.id()).isEqualTo(2L);
+        assertThat(response.createdAt()).isEqualTo(Instant.parse("2026-03-18T00:00:00Z"));
+        assertThat(response.updatedAt()).isNull();
+        assertThat(response.text()).isEqualTo("I met a white fox.");
         verify(repository).save(any(DreamEntry.class));
     }
 
