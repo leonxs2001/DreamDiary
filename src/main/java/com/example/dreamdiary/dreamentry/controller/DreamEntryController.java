@@ -48,7 +48,10 @@ public class DreamEntryController {
     @Operation(
             operationId = "createDreamEntry",
             summary = "Create a dream entry",
-            security = @SecurityRequirement(name = "bearerAuth"),
+            security = {
+                    @SecurityRequirement(name = "bearerAuth"),
+                    @SecurityRequirement(name = "oauth2", scopes = {"dreamdiary.write"})
+            },
             responses = {
                     @ApiResponse(responseCode = "201", description = "Dream entry created"),
                     @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
@@ -64,7 +67,10 @@ public class DreamEntryController {
     @Operation(
             operationId = "updateDreamEntryText",
             summary = "Update only the text of a dream entry",
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = {
+                    @SecurityRequirement(name = "bearerAuth"),
+                    @SecurityRequirement(name = "oauth2", scopes = {"dreamdiary.write"})
+            }
     )
     public DreamEntryResponse updateText(@PathVariable Long id, @Valid @RequestBody UpdateDreamEntryTextRequest request) {
         return service.updateText(id, request.text());
@@ -75,7 +81,10 @@ public class DreamEntryController {
             operationId = "searchDreamEntries",
             summary = "Search dream entries by day, timespan and text",
             description = "Rule: if day is provided, start and end are not allowed.",
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = {
+                    @SecurityRequirement(name = "bearerAuth"),
+                    @SecurityRequirement(name = "oauth2", scopes = {"dreamdiary.read"})
+            }
     )
     public PagedResponse<DreamEntryResponse> search(
             @RequestParam(required = false)
@@ -99,7 +108,10 @@ public class DreamEntryController {
     @Operation(
             operationId = "getDreamEntryById",
             summary = "Get one dream entry by id",
-            security = @SecurityRequirement(name = "bearerAuth"),
+            security = {
+                    @SecurityRequirement(name = "bearerAuth"),
+                    @SecurityRequirement(name = "oauth2", scopes = {"dreamdiary.read"})
+            },
             responses = {
                     @ApiResponse(responseCode = "200", description = "Dream entry found"),
                     @ApiResponse(
@@ -128,7 +140,10 @@ public class DreamEntryController {
     @Operation(
             operationId = "deleteDreamEntry",
             summary = "Delete a dream entry",
-            security = @SecurityRequirement(name = "bearerAuth")
+            security = {
+                    @SecurityRequirement(name = "bearerAuth"),
+                    @SecurityRequirement(name = "oauth2", scopes = {"dreamdiary.write"})
+            }
     )
     public void delete(@PathVariable Long id) {
         service.delete(id);

@@ -1,16 +1,27 @@
-openapi: 3.0.3
+openapi: 3.1.1
 info:
-  title: Dream Diary API
-  version: 1.0.0
-  description: API for creating and managing dream entries.
+  title: Dream Diary API + MCP
+  version: 1.2.0
+  description: REST API and MCP endpoint for creating and managing dream entries with OAuth2 and legacy API key auth.
 servers:
-  - url: https://your-domain.example.com
+  - url: https://example.de
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: API Key
+      description: Legacy static bearer API key from `DREAM_DIARY_API_KEY`.
+    oauth2:
+      type: oauth2
+      description: OAuth 2.0 Authorization Code with PKCE for Claude custom connectors.
+      flows:
+        authorizationCode:
+          authorizationUrl: /oauth/authorize
+          tokenUrl: /oauth/token
+          scopes:
+            dreamdiary.read: Read dream entries
+            dreamdiary.write: Create, update and delete dream entries
   schemas:
     CreateDreamEntryRequest:
       type: object
@@ -77,6 +88,128 @@ components:
         last:
           type: boolean
           example: false
+    OAuthTokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 28800
+        refresh_token:
+          type: string
+        scope:
+          type: string
+          example: dreamdiary.read dreamdiary.write
+    OAuthTokenError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: invalid_grant
+        error_description:
+          type: string
+          example: Invalid PKCE code_verifier.
+    OAuthProtectedResourceMetadata:
+      type: object
+      properties:
+        resource:
+          type: string
+          example: https://example.de/mcp
+        authorization_servers:
+          type: array
+          items:
+            type: string
+            example: https://example.de
+        bearer_methods_supported:
+          type: array
+          items:
+            type: string
+            example: header
+        scopes_supported:
+          type: array
+          items:
+            type: string
+            example: dreamdiary.read
+    OAuthAuthorizationServerMetadata:
+      type: object
+      properties:
+        issuer:
+          type: string
+        authorization_endpoint:
+          type: string
+        token_endpoint:
+          type: string
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+        scopes_supported:
+          type: array
+          items:
+            type: string
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+    McpJsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - method
+      properties:
+        jsonrpc:
+          type: string
+          enum: [ "2.0" ]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: "null"
+        method:
+          type: string
+          example: tools/call
+        params:
+          type: object
+          additionalProperties: true
+    McpJsonRpcResponse:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          enum: [ "2.0" ]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: "null"
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
     ApiError:
       type: object
       properties:
@@ -101,14 +234,255 @@ components:
           additionalProperties:
             type: string
 security:
-  - bearerAuth: []
+  - bearerAuth: [ ]
+  - oauth2: [ dreamdiary.read, dreamdiary.write ]
 paths:
+  /.well-known/oauth-protected-resource:
+    get:
+      operationId: oauthProtectedResourceMetadata
+      summary: RFC 9728 protected resource metadata
+      responses:
+        '200':
+          description: Metadata returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthProtectedResourceMetadata'
+  /.well-known/oauth-protected-resource/mcp:
+    get:
+      operationId: oauthProtectedResourceMetadataMcp
+      summary: RFC 9728 protected resource metadata for /mcp
+      responses:
+        '200':
+          description: Metadata returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthProtectedResourceMetadata'
+  /.well-known/oauth-authorization-server:
+    get:
+      operationId: oauthAuthorizationServerMetadata
+      summary: RFC 8414 authorization server metadata
+      responses:
+        '200':
+          description: Metadata returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthAuthorizationServerMetadata'
+  /.well-known/oauth-authorization-server/mcp:
+    get:
+      operationId: oauthAuthorizationServerMetadataMcp
+      summary: RFC 8414 authorization server metadata for /mcp
+      responses:
+        '200':
+          description: Metadata returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthAuthorizationServerMetadata'
+  /oauth/authorize:
+    get:
+      operationId: oauthAuthorizeScreen
+      summary: OAuth authorization endpoint (Authorization Code + PKCE)
+      parameters:
+        - in: query
+          name: response_type
+          required: true
+          schema:
+            type: string
+            enum: [ code ]
+        - in: query
+          name: client_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: redirect_uri
+          required: true
+          schema:
+            type: string
+            format: uri
+        - in: query
+          name: scope
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: state
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: code_challenge
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: code_challenge_method
+          required: true
+          schema:
+            type: string
+            enum: [ S256 ]
+        - in: query
+          name: resource
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Login form
+        '400':
+          description: Invalid request
+    post:
+      operationId: oauthAuthorizeSubmit
+      summary: Submit OAuth login form and issue authorization code
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - response_type
+                - client_id
+                - redirect_uri
+                - code_challenge
+                - code_challenge_method
+                - username
+                - password
+              properties:
+                response_type:
+                  type: string
+                  enum: [ code ]
+                client_id:
+                  type: string
+                redirect_uri:
+                  type: string
+                scope:
+                  type: string
+                state:
+                  type: string
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum: [ S256 ]
+                resource:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '302':
+          description: Redirect to client redirect_uri with authorization code
+        '200':
+          description: Login form re-rendered (e.g. invalid credentials)
+        '400':
+          description: Invalid request
+  /oauth/token:
+    post:
+      operationId: issueOauthToken
+      summary: OAuth token endpoint
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - grant_type
+              properties:
+                grant_type:
+                  type: string
+                  enum: [ authorization_code, refresh_token, password ]
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
+                code_verifier:
+                  type: string
+                refresh_token:
+                  type: string
+                client_id:
+                  type: string
+                client_secret:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenResponse'
+        '400':
+          description: OAuth error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenError'
+        '401':
+          description: OAuth client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenError'
+  /mcp:
+    post:
+      operationId: mcpJsonRpc
+      summary: MCP JSON-RPC endpoint
+      description: Handles MCP methods such as `initialize`, `tools/list` and `tools/call`.
+      security:
+        - bearerAuth: [ ]
+        - oauth2: [ dreamdiary.read, dreamdiary.write ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpJsonRpcRequest'
+            examples:
+              toolsCall:
+                summary: Call createDreamEntry MCP tool
+                value:
+                  jsonrpc: "2.0"
+                  id: "1"
+                  method: tools/call
+                  params:
+                    name: createDreamEntry
+                    arguments:
+                      text: Ich habe von einem leuchtenden Ozean getraeumt.
+                      dreamDate: 2026-03-23
+      responses:
+        '200':
+          description: JSON-RPC response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpJsonRpcResponse'
+        '401':
+          description: Unauthorized
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: Bearer challenge including resource_metadata for OAuth discovery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/dream-entries:
     post:
       operationId: createDreamEntry
       summary: Create a dream entry
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
+        - oauth2: [ dreamdiary.write ]
       requestBody:
         required: true
         content:
@@ -145,7 +519,8 @@ paths:
       summary: Search dream entries
       description: If `day` is present, `start` and `end` are rejected with 400.
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
+        - oauth2: [ dreamdiary.read ]
       parameters:
         - in: query
           name: day
@@ -218,7 +593,8 @@ paths:
       operationId: getDreamEntryById
       summary: Get one dream entry
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
+        - oauth2: [ dreamdiary.read ]
       parameters:
         - in: path
           name: id
@@ -249,7 +625,8 @@ paths:
       operationId: deleteDreamEntry
       summary: Delete a dream entry
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
+        - oauth2: [ dreamdiary.write ]
       parameters:
         - in: path
           name: id
@@ -277,7 +654,8 @@ paths:
       operationId: updateDreamEntryText
       summary: Update only the text field of a dream entry
       security:
-        - bearerAuth: []
+        - bearerAuth: [ ]
+        - oauth2: [ dreamdiary.write ]
       parameters:
         - in: path
           name: id

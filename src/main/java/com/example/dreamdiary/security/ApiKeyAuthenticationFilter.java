@@ -10,8 +10,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,20 +25,31 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String API_PATH_PREFIX = "/api/";
+    private static final List<String> PROTECTED_PATH_PREFIXES = List.of("/api/", "/mcp");
+    private static final String MCP_PATH_PREFIX = "/mcp";
 
     private final AppSecurityProperties securityProperties;
+    private final OAuthTokenService oauthTokenService;
     private final ObjectMapper objectMapper;
 
-    public ApiKeyAuthenticationFilter(AppSecurityProperties securityProperties, ObjectMapper objectMapper) {
+    public ApiKeyAuthenticationFilter(
+            AppSecurityProperties securityProperties,
+            OAuthTokenService oauthTokenService,
+            ObjectMapper objectMapper) {
         this.securityProperties = securityProperties;
+        this.oauthTokenService = oauthTokenService;
         this.objectMapper = objectMapper;
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return !path.startsWith(API_PATH_PREFIX);
+        for (String prefix : PROTECTED_PATH_PREFIXES) {
+            if (path.startsWith(prefix)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -51,23 +64,43 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
         String authorization = request.getHeader("Authorization");
         if (!StringUtils.hasText(authorization) || !authorization.startsWith(BEARER_PREFIX)) {
-            writeUnauthorized(response, request.getRequestURI(), "Missing bearer API key.");
+            writeUnauthorized(response, request.getRequestURI(), "Missing bearer token.");
             return;
         }
 
-        String providedApiKey = authorization.substring(BEARER_PREFIX.length());
-        if (!constantTimeEquals(configuredApiKey, providedApiKey)) {
-            writeUnauthorized(response, request.getRequestURI(), "Invalid bearer API key.");
+        String providedBearer = authorization.substring(BEARER_PREFIX.length());
+        if (!StringUtils.hasText(providedBearer)) {
+            writeUnauthorized(response, request.getRequestURI(), "Missing bearer token.");
             return;
         }
 
-        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                "api-key-client",
-                null,
-                List.of(new SimpleGrantedAuthority("ROLE_API_CLIENT"))
-        );
+        UsernamePasswordAuthenticationToken authentication = resolveAuthentication(configuredApiKey, providedBearer);
+        if (authentication == null) {
+            writeUnauthorized(response, request.getRequestURI(), "Invalid bearer token.");
+            return;
+        }
+
         SecurityContextHolder.getContext().setAuthentication(authentication);
         filterChain.doFilter(request, response);
+    }
+
+    private UsernamePasswordAuthenticationToken resolveAuthentication(String configuredApiKey, String providedBearer) {
+        if (constantTimeEquals(configuredApiKey, providedBearer)) {
+            return new UsernamePasswordAuthenticationToken(
+                    "api-key-client",
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_API_CLIENT"))
+            );
+        }
+
+        return oauthTokenService.authenticate(providedBearer)
+                .map(user -> {
+                    List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                    authorities.add(new SimpleGrantedAuthority("ROLE_API_CLIENT"));
+                    authorities.add(new SimpleGrantedAuthority("ROLE_OAUTH_CLIENT"));
+                    return new UsernamePasswordAuthenticationToken(user.username(), null, authorities);
+                })
+                .orElse(null);
     }
 
     private boolean constantTimeEquals(String expected, String provided) {
@@ -86,6 +119,9 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
                 null
         );
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        if (path.startsWith(MCP_PATH_PREFIX)) {
+            response.setHeader(HttpHeaders.WWW_AUTHENTICATE, oauthTokenService.mcpChallengeHeaderValue(message));
+        }
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(response.getOutputStream(), apiError);
     }

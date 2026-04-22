@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -86,6 +88,16 @@ public class GlobalExceptionHandler {
             AccessDeniedException exception,
             HttpServletRequest request) {
         return buildError(HttpStatus.FORBIDDEN, "You are not allowed to access this resource.", request, null);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiError> handleResponseStatusException(
+            ResponseStatusException exception,
+            HttpServletRequest request) {
+        HttpStatusCode statusCode = exception.getStatusCode();
+        HttpStatus status = HttpStatus.valueOf(statusCode.value());
+        String message = exception.getReason() != null ? exception.getReason() : status.getReasonPhrase();
+        return buildError(status, message, request, null);
     }
 
     @ExceptionHandler(Exception.class)

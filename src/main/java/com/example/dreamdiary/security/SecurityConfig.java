@@ -28,9 +28,12 @@ public class SecurityConfig {
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
-                        "/openapi.yaml"
+                        "/openapi.yaml",
+                        "/oauth/token",
+                        "/oauth/authorize",
+                        "/.well-known/**"
                 ).permitAll()
-                .requestMatchers("/api/**").authenticated()
+                .requestMatchers("/api/**", "/mcp", "/mcp/**").authenticated()
                 .anyRequest().permitAll());
 
         http.csrf(csrf -> csrf.disable());

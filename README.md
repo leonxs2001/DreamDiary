@@ -1,153 +1,146 @@
-# dream-diary for gpt
+# Dream Diary MCP Server
 
-REST-Anwendung für ein Traumtagebuch mit Spring Boot 3, Java 21, Maven und SQLite.  
-Die API ist über einen statischen Bearer-API-Key abgesichert, der aus `.env` geladen wird.
+Spring Boot 3 / Java 21 application with:
+- REST API for dream entries (`/api/**`)
+- MCP JSON-RPC endpoint (`/mcp`)
+- Legacy bearer API key auth (existing method)
+- OAuth 2.0 Authorization Code + PKCE for Claude custom connectors
 
-## Architektur (kurz)
-
-- `security`: API-Key-basierte Authentifizierung für `/api/**`
-- `dreamentry`: Controller, Service, Repository, Entity und DTOs
-- `common`: globales Fehlerformat und Exception-Handling
-- `config`: SQLite-Verzeichnis-Initialisierung und OpenAPI-Konfiguration
-
-## Voraussetzungen
+## Prerequisites
 
 - Java 21
 - Maven 3.9+
 
-## Lokaler Start
+## Environment (.env)
 
-1. `.env` prüfen/anpassen.
-2. Build und Tests:
-   ```bash
-   mvn clean test
-   ```
-3. Anwendung starten:
-   ```bash
-   mvn spring-boot:run
-   ```
-
-Die App läuft auf `http://localhost:8080`.
-
-## ENV-Variablen
-
-`.env` wird automatisch geladen über:
+`.env` is loaded via:
 
 ```properties
 spring.config.import=optional:file:.env[.properties]
 ```
 
-Pflichtvariablen:
+Required core variables:
 
-- `SQLITE_DB_PATH`  
-  Beispiel: `./data/dream-diary.db`
-- `DREAM_DIARY_API_KEY`  
-  Beispiel: `super-long-random-secret-api-key`
+- `SQLITE_DB_PATH`
+- `DREAM_DIARY_API_KEY`
 
-Optional:
+Required OAuth variables (all static):
 
-- `OPENAPI_SERVER_URL`  
-  Beispiel lokal: `http://localhost:8080`  
-  Beispiel Produktion: `https://your-domain.example.com`
+- `DREAM_DIARY_OAUTH_USERNAME`
+- `DREAM_DIARY_OAUTH_PASSWORD`
+- `DREAM_DIARY_OAUTH_CLIENT_ID`
+- `DREAM_DIARY_OAUTH_CLIENT_SECRET`
+- `DREAM_DIARY_OAUTH_REDIRECT_URIS`
+- `DREAM_DIARY_OAUTH_ISSUER_URL`
 
-Hinweise:
+Optional OAuth variables:
 
-- `DREAM_DIARY_API_KEY` wird beim Start validiert (fail-fast bei leerem Wert).
-- Das Verzeichnis für `SQLITE_DB_PATH` wird beim Start automatisch erstellt.
+- `DREAM_DIARY_OAUTH_SCOPES` (default: `dreamdiary.read dreamdiary.write`)
+- `DREAM_DIARY_OAUTH_TOKEN_TTL` (default: `PT8H`)
+- `DREAM_DIARY_OAUTH_REFRESH_TOKEN_TTL` (default: `P30D`)
+- `DREAM_DIARY_OAUTH_AUTH_CODE_TTL` (default: `PT5M`)
 
-## Authentifizierung
+General optional:
 
-Alle Endpunkte unter `/api/**` benötigen:
+- `OPENAPI_SERVER_URL`
+
+## Run
+
+```bash
+mvn clean test
+mvn spring-boot:run
+```
+
+App URL: `http://localhost:8080`
+
+## Authentication
+
+### 1) Legacy API key (still supported)
+
+Use on `/api/**` and `/mcp`:
 
 ```http
 Authorization: Bearer <DREAM_DIARY_API_KEY>
 ```
 
-`/actuator/health`, `/swagger-ui/**`, `/v3/api-docs/**` und `/openapi.yaml` sind öffentlich.
+### 2) OAuth for Claude connector
 
-## OpenAPI für GPT Actions
+This server now exposes the endpoints Claude expects:
 
-- Laufende JSON-Spec: `http://localhost:8080/v3/api-docs`
-- Statische YAML-Spec: `http://localhost:8080/openapi.yaml`
-- Repo-Datei: `openapi.yaml`
+- `/.well-known/oauth-protected-resource`
+- `/.well-known/oauth-protected-resource/mcp`
+- `/.well-known/oauth-authorization-server`
+- `/.well-known/oauth-authorization-server/mcp`
+- `/oauth/authorize`
+- `/oauth/token`
 
-### OpenAI GPT Action Setup (API Key)
+Flow:
 
-Im GPT-Action-Editor:
+1. Call `/mcp` without token -> server returns `401` + `WWW-Authenticate` with `resource_metadata`.
+2. Claude reads discovery metadata.
+3. Claude opens `/oauth/authorize` with PKCE params.
+4. User logs in with static `.env` username/password.
+5. Claude exchanges code on `/oauth/token` (with static client credentials).
+6. Claude retries MCP call with `Authorization: Bearer <access_token>`.
 
-- Authentication Type: `API Key`
-- API Key value: dein Wert aus `DREAM_DIARY_API_KEY`
-- API Key location: `Authorization` Header
-- Format: `Bearer <API_KEY>`
+## MCP Usage
 
-## API-Verhalten
+Endpoint: `POST /mcp`
 
-- Basis: `/api/dream-entries`
-- Beim Erstellen kann optional `dreamDate` (ISO-8601 Datum, `YYYY-MM-DD`) gesetzt werden.
-- Wenn `dreamDate` fehlt, wird `createdAt` auf den aktuellen Zeitpunkt (`now`, UTC) gesetzt.
-- Wenn `dreamDate` gesetzt ist, wird `createdAt` auf den Tagesstart in UTC gesetzt.
-- `updatedAt` wird bei PATCH gesetzt.
-- Zeitstempel sind UTC in ISO-8601.
-- Filterregel:
-  - `day` darf nicht mit `start`/`end` kombiniert werden.
-  - Bei Kombination gibt die API `400 Bad Request`.
+Initialize:
 
-## Beispiel-cURL
-
-PowerShell:
-
-```powershell
-$env:API_KEY="replace-with-your-api-key"
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "initialize",
+  "params": {}
+}
 ```
 
-Create:
+List tools:
 
-```bash
-curl -X POST "http://localhost:8080/api/dream-entries" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Ich flog ueber eine Stadt aus Glas.","dreamDate":"2026-03-23"}'
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "2",
+  "method": "tools/list",
+  "params": {}
+}
 ```
 
-Patch Text:
+Call tool (`createDreamEntry`):
 
-```bash
-curl -X PATCH "http://localhost:8080/api/dream-entries/1/text" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Dann wurde der Himmel golden."}'
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "3",
+  "method": "tools/call",
+  "params": {
+    "name": "createDreamEntry",
+    "arguments": {
+      "text": "Ich habe von einem leuchtenden Ozean getraeumt.",
+      "dreamDate": "2026-03-23"
+    }
+  }
+}
 ```
 
-Filter by day:
+Implemented MCP tools:
+- `createDreamEntry`
+- `searchDreamEntries`
+- `getDreamEntryById`
+- `updateDreamEntryText`
+- `deleteDreamEntry`
 
-```bash
-curl "http://localhost:8080/api/dream-entries?day=2026-03-23&page=0&size=20&sort=createdAt,desc" \
-  -H "Authorization: Bearer $API_KEY"
-```
+## OpenAPI
 
-Filter by timespan:
+- Runtime JSON: `http://localhost:8080/v3/api-docs`
+- Runtime YAML: `http://localhost:8080/openapi.yaml`
+- Repo spec: `openapi.yaml`
 
-```bash
-curl "http://localhost:8080/api/dream-entries?start=2026-03-23T00:00:00Z&end=2026-03-24T00:00:00Z" \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-Filter by q:
-
-```bash
-curl "http://localhost:8080/api/dream-entries?q=meer" \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-Healthcheck:
-
-```bash
-curl "http://localhost:8080/actuator/health"
-```
-
-## Deployment-Hinweise
-
-- Für GPT Actions muss die API öffentlich per HTTPS erreichbar sein.
-- Setze in Produktion:
-  - `OPENAPI_SERVER_URL=https://<deine-domain>`
-- Verwende einen starken, langen API-Key und rotiere ihn regelmäßig.
+The spec documents:
+- legacy bearer + OAuth2 authorizationCode security schemes
+- OAuth discovery endpoints
+- `/oauth/authorize` and `/oauth/token`
+- MCP endpoint `/mcp`
